@@ -1,6 +1,6 @@
 # NOVA deck designer
 
-**Originally created by [Ofir Gavish](https://github.com/OfirGavish).**
+**Created by [Ofir Gavish](https://github.com/OfirGavish).**
 
 This is the single installable skill folder. It contains four fictional NOVA
 WORKS reference decks, direct-PPTX generation scripts, and binding references.
@@ -14,7 +14,7 @@ visible credit to Ofir Gavish in the README or primary project page of
 redistributed copies, modified versions, packaged skills, or substantial
 portions. The copyright notice and full license must also be retained.
 
-Suggested wording:
+Suggested wording for republishers:
 
 > Originally created by Ofir Gavish.
 

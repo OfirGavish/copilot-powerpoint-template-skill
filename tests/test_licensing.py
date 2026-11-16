@@ -8,7 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "nova-deck-designer"
 IDENTIFIER = "LicenseRef-NOVA-Skill-Attribution-1.0"
-CREDIT = "Originally created by Ofir Gavish."
+CREATOR_CREDIT = "Created by Ofir Gavish."
+REPUBLISHER_CREDIT = "Originally created by Ofir Gavish."
 
 
 class LicensingTests(unittest.TestCase):
@@ -16,7 +17,7 @@ class LicensingTests(unittest.TestCase):
         license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
         self.assertIn(IDENTIFIER, license_text)
         self.assertIn("Visible creator attribution", license_text)
-        self.assertIn(CREDIT, license_text)
+        self.assertIn(REPUBLISHER_CREDIT, license_text)
         self.assertIn("a README supplied", license_text)
         self.assertIn("primary project page", license_text)
         self.assertFalse(license_text.startswith("MIT License"))
@@ -30,7 +31,7 @@ class LicensingTests(unittest.TestCase):
         skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn(f"license: {IDENTIFIER}", skill)
         self.assertIn('author: "Ofir Gavish"', skill)
-        self.assertIn(CREDIT, skill)
+        self.assertIn(CREATOR_CREDIT, skill)
         self.assertEqual((ROOT / "LICENSE").read_bytes(), (SKILL / "LICENSE.txt").read_bytes())
 
     def test_distributed_zip_contains_credit_readme_and_full_license(self):
@@ -44,9 +45,15 @@ class LicensingTests(unittest.TestCase):
             readme = archive.read("nova-deck-designer/README.md").decode("utf-8")
             self.assertEqual(archive.read("nova-deck-designer/LICENSE.txt"),
                              (ROOT / "LICENSE").read_bytes())
-            self.assertIn("Originally created by", readme)
+            self.assertIn("**Created by [Ofir Gavish]", readme)
             self.assertIn("Ofir Gavish", readme)
             self.assertIn(IDENTIFIER, license_text)
+
+    def test_original_project_headers_use_created_by_not_republisher_wording(self):
+        for path in (ROOT / "README.md", ROOT / "ATTRIBUTION.md", SKILL / "README.md"):
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("**Created by [Ofir Gavish]", text)
+            self.assertNotIn("**Originally created by [Ofir Gavish]", text)
 
 
 if __name__ == "__main__":

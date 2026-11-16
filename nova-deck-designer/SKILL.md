@@ -9,7 +9,7 @@ metadata:
 ---
 # NOVA deck designer
 
-Originally created by Ofir Gavish. Redistribution terms are in LICENSE.txt.
+Created by Ofir Gavish. Redistribution terms are in LICENSE.txt.
 Ordinary generated presentations do not require creator credit; do not add
 such a credit to a presentation unless the user asks for it.
 

@@ -1,13 +1,13 @@
 # Creator attribution
 
-**Originally created by [Ofir Gavish](https://github.com/OfirGavish).**
+**Created by [Ofir Gavish](https://github.com/OfirGavish).**
 
 When redistributing or republishing this skill, a modified version, a packaged
 copy, or a substantial portion of it, the [custom license](LICENSE) requires
 reasonably visible creator credit in the redistribution's README or primary
 project page. Retaining a name only in a license file is not sufficient.
 
-This line satisfies the visible-credit requirement:
+For republished copies, this line satisfies the visible-credit requirement:
 
 > Originally created by Ofir Gavish.
 

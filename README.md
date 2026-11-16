@@ -4,7 +4,7 @@ A custom skill for Copilot in PowerPoint that creates **new, editable PPTX files
 from four bundled NOVA WORKS templates: English or Hebrew, dark or light.
 NOVA WORKS is an original fictional demo brand; all sample figures are synthetic.
 
-**Originally created by [Ofir Gavish](https://github.com/OfirGavish).**
+**Created by [Ofir Gavish](https://github.com/OfirGavish).**
 
 ![English and Hebrew NOVA WORKS templates in dark and light themes](docs/images/templates.png)
 
