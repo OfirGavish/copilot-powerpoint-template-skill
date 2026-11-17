@@ -26,8 +26,9 @@ CT = "http://schemas.openxmlformats.org/package/2006/content-types"
 MISSING = object()
 BOUNDARY = re.compile(r"(?<=[\u0590-\u05ff])(?=[A-Za-z])|(?<=[A-Za-z])(?=[\u0590-\u05ff])")
 PROTECTED = re.compile(r"(https?://\S+|www\.\S+|[^\s@]+@[^\s@]+)", re.I)
+# Boundary spaces belong to the surrounding RTL text, not the LTR phrase.
 LTR = re.compile(r"https?://\S+|www\.\S+|[^\s@]+@[^\s@]+|"
-                 r"[+-]?[A-Za-z0-9][A-Za-z0-9 \t%+:/@&()_'=.,-]*", re.I)
+                 r"[+-]?[A-Za-z0-9][A-Za-z0-9 \t%+:/@&()_'=.,-]*(?<![ \t])", re.I)
 MUTABLE = ("ppt/slides/", "ppt/notesSlides/", "ppt/charts/",
            "ppt/embeddings/", "ppt/diagrams/")
 DESIGN = ("ppt/slideMasters/", "ppt/slideLayouts/", "ppt/theme/", "ppt/fonts/")
@@ -328,6 +329,8 @@ def fill_text(frame, value, rtl):
         for text, ltr in display_runs(line, rtl):
             run = paragraph.add_run()
             run.text = text
+            if text and (text[0].isspace() or text[-1].isspace()):
+                run._r.t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
             properties = run._r.get_or_add_rPr()
             if run_style is not None:
                 properties = copy.deepcopy(run_style)
@@ -343,7 +346,9 @@ def fill_text(frame, value, rtl):
 
 
 def update_chart(shape, value):
+    from pptx.chart.axis import ValueAxis
     from pptx.chart.data import CategoryChartData
+    from pptx.chart.datalabel import DataLabels
     require(shape.has_chart and isinstance(value, dict), "Chart binding requires a chart payload")
     require(set(value) == {"categories", "series", "number_format"},
             "Chart requires categories, series and explicit number_format")
@@ -370,12 +375,19 @@ def update_chart(shape, value):
     shape.chart.replace_data(data)
     if len(series) > 1:
         shape.chart.has_legend = True
-    shape.chart.value_axis.minimum_scale = None
-    shape.chart.value_axis.maximum_scale = None
-    shape.chart.value_axis.tick_labels.number_format = value["number_format"]
-    for plot in shape.chart.plots:
-        if plot.has_data_labels:
-            plot.data_labels.number_format = value["number_format"]
+    for element in shape.chart._chartSpace.plotArea.valAx_lst:
+        axis = ValueAxis(element)
+        axis.minimum_scale = None
+        axis.maximum_scale = None
+        axis.major_unit = None
+        axis.minor_unit = None
+        axis.tick_labels.number_format = value["number_format"]
+    # replace_data preserves (and clones) series/point overrides, which outrank plot labels.
+    for labels in shape.chart._chartSpace.xpath(".//c:dLbls"):
+        DataLabels(labels).number_format = value["number_format"]
+        for number in labels.xpath("./c:dLbl/c:numFmt"):
+            number.formatCode = value["number_format"]
+            number.sourceLinked = False
 
 
 def update_table(shape, value, rtl):

@@ -1,6 +1,6 @@
 # NOVA deck designer
 
-A custom skill for Copilot in PowerPoint that creates **new, editable PPTX files**
+Custom skills that create **new, editable PPTX files**
 from four bundled NOVA WORKS templates: English or Hebrew, dark or light.
 NOVA WORKS is an original fictional demo brand; all sample figures are synthetic.
 
@@ -8,7 +8,20 @@ NOVA WORKS is an original fictional demo brand; all sample figures are synthetic
 
 ![English and Hebrew NOVA WORKS templates in dark and light themes](docs/images/templates.png)
 
-## Install
+## Choose a variant
+
+| Variant | Intended use | Package |
+|---|---|---|
+| `nova-deck-designer` | Copilot in PowerPoint; original folder-install workflow | `dist\nova-deck-designer.zip` or the source skill folder |
+| `bilingual-multi-template-deck-builder` | Cowork, Copilot Studio Microsoft Copilot-harness agents, and Scout with supported native-template tools or Python, plus file output | `dist\bilingual-multi-template-deck-builder.zip` or its generated unpacked folder |
+
+Both use **one shared renderer, binding manifest and set of four templates**.
+The portable ZIP contains the decks, scripts, examples and host guidance; no
+extra template attachment is required in a capable runtime. Target-host import,
+execution and delivery are only partially verified, not cross-host certified.
+See the [portable build and installation guide](docs/PORTABLE.md).
+
+## Install in PowerPoint
 
 1. In PowerPoint Copilot, open **Settings (…) → Manage skills → Custom skills**.
 2. Select **Create OneDrive folder** if needed, then **Open skills folder**.
@@ -46,7 +59,7 @@ of claiming automatic success.
 
 ## How it works
 
-`nova-deck-designer` is the **single installable skill folder**:
+`nova-deck-designer` is the **PowerPoint-specific installable skill folder**:
 
 ```text
 nova-deck-designer\
@@ -76,7 +89,11 @@ URLs or extra connectors are required. The result remains a local file until
 the host actually publishes it as an artifact; generation does not automatically
 change the open PowerPoint canvas.
 
-## Compatibility
+## PowerPoint-specific compatibility
+
+These requirements apply to the original `nova-deck-designer` workflow.
+The portable variant additionally supports a capability-gated native route;
+see [PORTABLE.md](docs/PORTABLE.md).
 
 - The runtime must **already provide** Python, the runtime dependencies, code
   execution, local asset access, and actual artifact/file output. A skill grants
@@ -103,6 +120,7 @@ python nova-deck-designer\scripts\build_presentation.py --probe
 New-Item -ItemType Directory -Force outputs | Out-Null
 python nova-deck-designer\scripts\build_presentation.py --template en-light --content examples\pilot-en.json --output outputs\pilot.pptx
 python -m unittest discover -s tests -v
+python tools\package_skill.py --variant all
 ```
 
 The read-only probe must actually run; its result does not prove that a host can
@@ -117,7 +135,21 @@ Template keys are `en-dark`, `en-light`, `he-dark`, and `he-light`.
 eight layouts. See the [content contract](nova-deck-designer/references/content-format.md)
 and [custom template guide](docs/CUSTOM_TEMPLATES.md) before changing bindings.
 
+The default `python tools\package_skill.py` still builds only the original
+PowerPoint ZIP with its observed size guards. `--variant portable` builds the
+root-level portable ZIP, complete unpacked skill, separately licensed MIT CAT submission
+and a checksum/size receipt under `dist`. Do not install the partial authoring
+overlay under `variants` directly. See [PORTABLE.md](docs/PORTABLE.md).
+
 ## License and reuse
+
+The original repository and ordinary PowerPoint/portable ZIPs retain the custom
+license below. The **separate, author-approved CAT edition** is generated under
+`dist\cat\submissions\bilingual-multi-template-deck-builder` using the standard
+[MIT terms](editions/cat-mit/LICENSE.txt). It retains Ofir Gavish's copyright
+notice and visible creator credit, but has no additional README/project-page
+credit condition. This does not relicense the original distributions.
+See [CAT edition details](docs/PORTABLE.md#author-approved-mit-cat-edition).
 
 The [NOVA Skill Attribution License 1.0](LICENSE) is a **custom permissive
 attribution license**, not standard MIT or an OSI-approved license.

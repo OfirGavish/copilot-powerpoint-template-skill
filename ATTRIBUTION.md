@@ -2,6 +2,12 @@
 
 **Created by [Ofir Gavish](https://github.com/OfirGavish).**
 
+This guidance applies to the original repository and its ordinary skill ZIPs.
+The separately authorized CAT edition instead uses the standard
+[MIT License](editions/cat-mit/LICENSE.txt): retain its copyright and permission
+notice as MIT requires. Its visible creator credit is informational, not an
+additional redistribution condition. The original custom license is unchanged.
+
 When redistributing or republishing this skill, a modified version, a packaged
 copy, or a substantial portion of it, the [custom license](LICENSE) requires
 reasonably visible creator credit in the redistribution's README or primary
