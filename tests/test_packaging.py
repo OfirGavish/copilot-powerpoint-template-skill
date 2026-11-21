@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import json
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -165,6 +166,47 @@ class PortablePackagingTests(unittest.TestCase):
         self.assertIn("actual selected bundled", native)
         self.assertIn("Do not", native)
         self.assertIn("probe/builder ran", native)
+
+    def test_python_gate_lists_the_complete_manifest_template_set(self):
+        config = json.loads((self.skill / "references" / "templates.json").read_text(encoding="utf-8"))
+        instructions = (self.skill / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("scripts/build_presentation.py", instructions)
+        self.assertIn("references/templates.json", instructions)
+        for profile in config["templates"].values():
+            self.assertIn(profile["asset"], instructions)
+        self.assertIn("selected-template-only copy cannot", instructions)
+
+    def test_selected_template_only_staging_fails_actual_probe(self):
+        partial = self.directory / "selected-template-only"
+        (partial / "scripts").mkdir(parents=True)
+        (partial / "references").mkdir()
+        shutil.copyfile(self.skill / "scripts" / "build_presentation.py",
+                        partial / "scripts" / "build_presentation.py")
+        shutil.copyfile(self.skill / "references" / "templates.json",
+                        partial / "references" / "templates.json")
+        config = json.loads((partial / "references" / "templates.json").read_text(encoding="utf-8"))
+        asset = Path(config["templates"]["en-light"]["asset"])
+        (partial / asset).parent.mkdir(parents=True)
+        shutil.copyfile(self.skill / asset, partial / asset)
+        result = subprocess.run(
+            [sys.executable, str(partial / "scripts" / "build_presentation.py"), "--probe"],
+            capture_output=True, text=True, encoding="utf-8",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        error = json.loads(result.stderr)
+        self.assertFalse(error["ok"])
+        self.assertIn("NOVA-EN-DARK.pptx", error["error"])
+
+    def test_human_installation_and_prompts_are_not_in_runtime_reference(self):
+        readme = (self.skill / "README.md").read_text(encoding="utf-8")
+        runtime = (self.skill / "references" / "hosts.md").read_text(encoding="utf-8")
+        for human_marker in ("Cowork > Customize > Add > Upload", "Upload a skill",
+                             "## First prompt", "python -m pip install"):
+            self.assertIn(human_marker, readme)
+            self.assertNotIn(human_marker, runtime)
+        self.assertIn("COMPLETE", runtime)
+        self.assertIn("provider-aware", runtime)
+        self.assertIn("actual installed skill root", runtime)
 
     def test_receipt_records_actual_sizes_and_checksum_not_host_certification(self):
         self.assertEqual(self.receipt["sha256"], hashlib.sha256(self.archive.read_bytes()).hexdigest())

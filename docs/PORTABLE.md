@@ -285,3 +285,35 @@ license/notices plus CAT's usual removal of README and metadata sidecars.
 This resolves the author's license-choice blocker without asserting maintainer
 acceptance or publishing anything. The local CAT dependency compatibility repair
 and its not-yet-landed upstream status remain as documented above.
+
+## Review follow-up in 1.1.2
+
+The portable skill's review follow-up keeps the existing templates and license
+editions while tightening the content/runtime contracts:
+
+- Select Python only when the COMPLETE bundle is accessible: builder, manifest
+  and all four assets at their original relative paths. Native access to one
+  chosen PPTX does not establish this full-bundle Python capability.
+- Reject literal dots in input object keys before flattening; dotted binding
+  strings in the manifest remain valid. Unsupported fields must error rather
+  than vanish during lookup.
+- Preserve the exact supplied text while assigning native run direction.
+  Desired spaces come from the plan; do not rewrite mixed-script hashtags,
+  adjacent Hebrew/Latin words or product prefixes.
+- Keep adjacent Hebrew prefixes/suffixes outside common ASCII email tokens.
+  ASCII email/URL cases and punctuation are covered separately from unverified
+  internationalized-address behavior.
+- Give added chart series distinct selected-theme accents while preserving the
+  first series' authored styling and the original masters/themes/media. Native
+  multi-series legends reserve space below the plot; the original high-value
+  overlap case is retained in regression/render evidence, not avoided by
+  changing test data.
+- Keep human installation and first-use material in the root README. The
+  agent-facing host reference now contains only resource, execution and delivery
+  contracts.
+
+The PowerPoint-specific 1.0.1 metadata correction was independently confirmed
+to load by the user. PowerPoint skill 1.0.2 retains that correction while sharing
+the reviewed renderer; this does not diagnose an unrelated package's failure.
+The 1.1.1 live-host evidence above is historical, not a claim that every newer
+build has been re-tested in every host or tenant.

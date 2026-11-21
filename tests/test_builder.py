@@ -55,7 +55,9 @@ def check_relationships(test, file):
 
 class BuilderTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="pptx-template-test-")
+        output_root = ROOT / "outputs"
+        output_root.mkdir(exist_ok=True)
+        self.temporary = tempfile.TemporaryDirectory(prefix="pptx-template-test-", dir=output_root)
         self.addCleanup(self.temporary.cleanup)
         self.directory = Path(self.temporary.name)
 
@@ -207,6 +209,63 @@ class BuilderTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing required"):
             self.generate("en-light", content)
 
+    def test_literal_dotted_keys_are_rejected_recursively_with_context(self):
+        profile = BUILDER.load_config(SKILL)["templates"]["en-light"]
+        cases = [
+            ({"language": "en", "slides": [], "slides.0": {}}, "$['slides.0']"),
+            ({"language": "en", "slides": [
+                {"layout": "cover", "title": "T", "subtitle.text": "Important subtitle"}]},
+             "$['slides'][0]['subtitle.text']"),
+        ]
+        for layout, field, key in (
+                ("three-cards", "cards", "heading.text"),
+                ("chart", "chart", "categories.0"),
+                ("chart", "chart", "series.name"),
+                ("table", "rows", "cell.text")):
+            slide = copy.deepcopy(next(slide for slide in plan("all-layouts-en.json")["slides"]
+                                       if slide["layout"] == layout))
+            if field == "cards":
+                slide[field][0][key] = "Do not drop"
+                context = f"$['slides'][0]['cards'][0]['{key}']"
+            elif field == "rows":
+                slide[field][1][0] = {key: "Do not drop"}
+                context = f"$['slides'][0]['rows'][1][0]['{key}']"
+            else:
+                slide[field][key] = "Do not drop"
+                context = f"$['slides'][0]['chart']['{key}']"
+            cases.append(({"language": "en", "slides": [slide]}, context))
+        series_slide = copy.deepcopy(next(slide for slide in plan("all-layouts-en.json")["slides"]
+                                          if slide["layout"] == "chart"))
+        series_slide["chart"]["series"][0]["values.0"] = 1
+        cases.append(({"language": "en", "slides": [series_slide]},
+                      "$['slides'][0]['chart']['series'][0]['values.0']"))
+        for content, context in cases:
+            with self.subTest(context=context):
+                with self.assertRaises(ValueError) as error:
+                    BUILDER.validate_plan(content, profile)
+                self.assertIn("Literal dots", str(error.exception))
+                self.assertIn(context, str(error.exception))
+                self.assertFalse((self.directory / "output.pptx").exists())
+        BUILDER.validate_plan(plan("all-layouts-en.json"), profile)
+
+    def test_mixed_script_text_is_preserved_in_titles_cards_tables_and_notes(self):
+        content = plan("all-layouts-he.json")
+        samples = ["#חדשAI", "לCopilot", "כתבו ב־test@example.com", "לפני  AI\t אחרי"]
+        cover, cards, table = (next(slide for slide in content["slides"]
+                                   if slide["layout"] == layout)
+                               for layout in ("cover", "three-cards", "table"))
+        cover["title"], cover["subtitle"], cover["notes"] = samples[:3]
+        cards["cards"][0]["body"] = samples[1]
+        table["rows"][1] = samples[:3]
+        presentation = Presentation(self.generate("he-light", content))
+        for sample in samples[:3]:
+            self.assertIn(sample, texts(presentation))
+        self.assertEqual(presentation.slides[0].notes_slide.notes_text_frame.text, samples[2])
+        actual_table = next(shape.table for slide in presentation.slides
+                            for shape in slide.shapes if shape.has_table)
+        self.assertEqual([cell.text for cell in actual_table.rows[1].cells],
+                         list(reversed(samples[:3])))
+
     def test_language_mismatch_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "language"):
             self.generate("en-dark", plan("pilot-he.json"))
@@ -291,7 +350,7 @@ class BuilderTests(unittest.TestCase):
         text = "מערכתAI https://example.com/שלוםABC testשלום@example.com Copilotלתעשייה"
         runs = BUILDER.display_runs(text, True)
         value = "".join(part for part, _ in runs)
-        self.assertEqual(value, "מערכת AI https://example.com/שלוםABC testשלום@example.com Copilot לתעשייה")
+        self.assertEqual(value, text)
 
     def test_cli_reports_errors_instead_of_false_success(self):
         result = subprocess.run(

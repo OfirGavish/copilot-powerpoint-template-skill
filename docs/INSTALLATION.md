@@ -121,6 +121,9 @@ meaning, templates or generation instructions. Replace the complete package
 in the failing environment, wait for sync, Refresh, and start a new chat.
 This corrects a confirmed format defect; an exact client error is still needed
 before declaring it the cause of any particular tenant's failure.
+Version 1.0.2 retains that valid quoted frontmatter and incorporates the shared
+renderer review fixes. A successful NOVA loading test does not diagnose failures
+of a different skill or guarantee presentation-generation capabilities.
 
 Compare the installed SKILL.md with the distributed package. Two installations
 with the same skill name can contain different instructions or versions;

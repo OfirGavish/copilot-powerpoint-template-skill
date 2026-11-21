@@ -11,7 +11,10 @@ from xml.etree import ElementTree
 from lxml import etree
 from pptx import Presentation
 from pptx.chart.axis import ValueAxis
+from pptx.enum.chart import XL_LEGEND_POSITION
+from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.oxml.xmlchemy import OxmlElement
+from pptx.util import Pt
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -115,7 +118,7 @@ class ChartFormatTests(unittest.TestCase):
                 self.assert_formats(chart, number_format)
                 self.assertEqual(len(chart.series), 2)
                 self.assertTrue(chart.has_legend)
-                for series in chart.series:
+                for index, series in enumerate(chart.series):
                     labels = series._element.find(f"{{{CHART_NS}}}dLbls")
                     self.assertEqual(etree.tostring(labels.find(f"{{{CHART_NS}}}txPr")),
                                      label_style)
@@ -123,7 +126,15 @@ class ChartFormatTests(unittest.TestCase):
                     self.assertEqual(len(points), 1)
                     self.assertEqual(etree.tostring(points[0].find(f"{{{CHART_NS}}}txPr")),
                                      point_style)
-                    self.assertEqual(etree.tostring(series._element.spPr), series_style)
+                    if index == 0:
+                        self.assertEqual(etree.tostring(series._element.spPr), series_style)
+                    else:
+                        style = copy.deepcopy(series._element.spPr)
+                        style.remove(style.find(f"{{{BUILDER.A}}}solidFill"))
+                        original = etree.fromstring(series_style)
+                        original.remove(original.find(f"{{{BUILDER.A}}}solidFill"))
+                        self.assertEqual(etree.tostring(style, method="c14n", exclusive=True),
+                                         etree.tostring(original, method="c14n", exclusive=True))
                     self.assertEqual([child.tag for child in points[0]][:2],
                                      [f"{{{CHART_NS}}}idx", f"{{{CHART_NS}}}numFmt"])
                 self.assert_workbook(chart, number_format,
@@ -189,6 +200,116 @@ class ChartFormatTests(unittest.TestCase):
                     self.assertEqual(list(shape.chart.series[0].values),
                                      value["series"][0]["values"])
 
+    def test_all_templates_resolve_two_three_and_six_distinct_theme_series(self):
+        config = BUILDER.load_config(SKILL)
+        for key, profile in config["templates"].items():
+            for count in (2, 3, 6):
+                with self.subTest(template=key, series=count):
+                    presentation = Presentation(SKILL / profile["asset"])
+                    shape = chart_shape(
+                        presentation, profile["layouts"]["chart"]["reference_slide"] - 1)
+                    chart = shape.chart
+                    chart.series[0].format.line.width = Pt(2)
+                    first_style = etree.tostring(chart.series[0]._element.spPr)
+                    first_labels = chart._chartSpace.xpath(".//c:ser/c:dLbls")[0]
+                    point = first_labels.get_or_add_dLbl_for_point(1)
+                    point_format = OxmlElement("c:numFmt")
+                    point_format.set("formatCode", "0.00%")
+                    point_format.set("sourceLinked", "1")
+                    point.insert(1, point_format)
+                    point.get_or_add_txPr().defRPr.set("b", "1")
+                    point_style = etree.tostring(point.find(f"{{{CHART_NS}}}txPr"))
+                    line_style = etree.tostring(chart.series[0]._element.spPr.find(
+                        f"{{{BUILDER.A}}}ln"))
+                    value = payload('0"%"')
+                    value["series"] = [{"name": f"Series {index}", "values": [11 + index, 22, 33]}
+                                       for index in range(count)]
+                    BUILDER.update_chart(shape, value)
+                    output = io.BytesIO()
+                    presentation.save(output)
+                    output.seek(0)
+                    restored = Presentation(output)
+                    chart = chart_shape(
+                        restored, profile["layouts"]["chart"]["reference_slide"] - 1).chart
+                    theme = etree.fromstring(
+                        restored.slide_master.part.part_related_by(RT.THEME).blob)
+                    palette = {f"accent{index}": theme.find(
+                        f".//{{{BUILDER.A}}}accent{index}/{{{BUILDER.A}}}srgbClr").get("val")
+                               for index in range(1, 7)}
+                    colors = []
+                    for index, series in enumerate(chart.series):
+                        fill = series._element.xpath("./c:spPr/a:solidFill/*")[0]
+                        if index == 0:
+                            self.assertEqual(etree.tostring(series._element.spPr), first_style)
+                            colors.append(fill.get("val"))
+                        else:
+                            self.assertEqual(fill.tag, f"{{{BUILDER.A}}}schemeClr")
+                            colors.append(palette[fill.get("val")])
+                        self.assertEqual(etree.tostring(series._element.spPr.find(
+                            f"{{{BUILDER.A}}}ln")), line_style)
+                        labels = series._element.find(f"{{{CHART_NS}}}dLbls")
+                        self.assertEqual(etree.tostring(labels.xpath("./c:dLbl/c:txPr")[0]),
+                                         point_style)
+                    self.assertEqual(len(set(colors)), count)
+                    self.assertTrue(chart.has_legend)
+                    self.assert_formats(chart, '0"%"')
+                    self.assert_workbook(chart, '0"%"',
+                                         {chr(ord("B") + index): series["values"]
+                                          for index, series in enumerate(value["series"])})
+
+    def test_insufficient_distinct_theme_accents_fail_before_replacement(self):
+        theme = self.presentation.slide_master.part.part_related_by(RT.THEME)
+        xml = etree.fromstring(theme.blob)
+        first = self.shape.chart.series[0]._element.xpath("./c:spPr/a:solidFill/a:srgbClr")[0]
+        for index in range(1, 7):
+            xml.find(f".//{{{BUILDER.A}}}accent{index}/{{{BUILDER.A}}}srgbClr").set(
+                "val", first.get("val"))
+        theme._blob = etree.tostring(xml)
+        before = self.shape.chart._chartSpace.xml
+        workbook = self.shape.chart.part.chart_workbook.xlsx_part.blob
+        with self.assertRaisesRegex(ValueError, "enough distinct series accent colors"):
+            BUILDER.update_chart(self.shape, payload(multiple=True))
+        self.assertEqual(self.shape.chart._chartSpace.xml, before)
+        self.assertEqual(self.shape.chart.part.chart_workbook.xlsx_part.blob, workbook)
+
+    def test_first_theme_fill_and_color_mapping_are_resolved_without_recoloring_first(self):
+        first = self.shape.chart.series[0]._element.xpath("./c:spPr/a:solidFill")[0]
+        first.remove(first[0])
+        color = OxmlElement("a:schemeClr")
+        color.set("val", "accent2")
+        first.append(color)
+        self.presentation.slide_master._element.find(f"{{{BUILDER.P}}}clrMap").set(
+            "accent2", "accent3")
+        before = etree.tostring(self.shape.chart.series[0]._element.spPr)
+        self.assertEqual(BUILDER.chart_series_accents(self.shape, 3), ["accent1", "accent4"])
+        BUILDER.update_chart(self.shape, payload(multiple=True))
+        self.assertEqual(etree.tostring(self.shape.chart.series[0]._element.spPr), before)
+        self.assertEqual(self.shape.chart.series[1]._element.xpath(
+            "./c:spPr/a:solidFill/a:schemeClr")[0].get("val"), "accent1")
+
+    def test_cloned_point_fills_change_color_without_changing_other_point_styles(self):
+        series = self.shape.chart.series[0]._element
+        point = OxmlElement("c:dPt")
+        index = OxmlElement("c:idx")
+        index.set("val", "1")
+        point.append(index)
+        properties = copy.deepcopy(series.spPr)
+        properties.find(f"{{{BUILDER.A}}}solidFill/{{{BUILDER.A}}}srgbClr").set("val", "FFFFFF")
+        point.append(properties)
+        labels = series.find(f"{{{CHART_NS}}}dLbls")
+        series.insert(list(series).index(labels), point)
+        original = etree.tostring(point)
+        BUILDER.update_chart(self.shape, payload(multiple=True))
+        self.assertEqual(etree.tostring(self.shape.chart.series[0]._element.xpath("./c:dPt")[0]),
+                         original)
+        added = self.shape.chart.series[1]._element.xpath("./c:dPt")[0]
+        self.assertEqual(added.xpath("./c:spPr/a:solidFill/a:schemeClr")[0].get("val"), "accent2")
+        before, after = copy.deepcopy(point), copy.deepcopy(added)
+        for item in (before, after):
+            fill = item.xpath("./c:spPr/a:solidFill")[0]
+            fill.getparent().remove(fill)
+        self.assertEqual(etree.tostring(before), etree.tostring(after))
+
     def test_build_keeps_independent_workbooks_source_and_design_unchanged(self):
         output_root = ROOT / "outputs"
         output_root.mkdir(exist_ok=True)
@@ -196,7 +317,7 @@ class ChartFormatTests(unittest.TestCase):
             output = Path(directory) / "formats.pptx"
             source = (SKILL / self.profile["asset"]).read_bytes()
             slides = [{"layout": "chart", "title": f"Synthetic chart {index}",
-                       "chart": payload(number_format, values)}
+                       "chart": payload(number_format, values, multiple=True)}
                       for index, (number_format, values) in enumerate((
                           ("0", (11, 22, 33)), ("0%", (0.11, 0.22, 0.33)),
                           ('0"%"', (11, 22, 33))), 1)]
@@ -210,13 +331,92 @@ class ChartFormatTests(unittest.TestCase):
                 expected = slide["chart"]
                 self.assert_formats(chart, expected["number_format"])
                 self.assert_workbook(chart, expected["number_format"],
-                                     {"B": expected["series"][0]["values"]})
+                                     {"B": expected["series"][0]["values"],
+                                      "C": expected["series"][1]["values"]})
             self.assertEqual((SKILL / self.profile["asset"]).read_bytes(), source)
             with zipfile.ZipFile(io.BytesIO(source)) as original, zipfile.ZipFile(output) as result:
                 self.assertIsNone(result.testzip())
                 for name in original.namelist():
                     if name.startswith(BUILDER.DESIGN):
                         self.assertEqual(result.read(name), original.read(name))
+
+    def test_all_profiles_multiseries_builds_keep_workbooks_and_assets_independent(self):
+        output_root = ROOT / "outputs"
+        output_root.mkdir(exist_ok=True)
+        config = BUILDER.load_config(SKILL)
+        with tempfile.TemporaryDirectory(prefix="chart-colors-", dir=output_root) as directory:
+            for key, profile in config["templates"].items():
+                with self.subTest(template=key):
+                    source = (SKILL / profile["asset"]).read_bytes()
+                    slides = [{"layout": "chart", "title": f"Chart {index}",
+                               "chart": payload("0", values, multiple=True)}
+                              for index, values in enumerate(((11, 22, 33), (44, 55, 66)))]
+                    output = Path(directory) / f"{key}.pptx"
+                    BUILDER.build(SKILL, key, {"language": profile["language"], "slides": slides},
+                                  output)
+                    presentation = Presentation(output)
+                    charts = [chart_shape(presentation, index).chart for index in range(2)]
+                    self.assertEqual(len({chart.part.partname for chart in charts}), 2)
+                    self.assertEqual(len({chart.part.chart_workbook.xlsx_part.partname
+                                          for chart in charts}), 2)
+                    second_workbook = charts[1].part.chart_workbook.xlsx_part.blob
+                    for chart, slide in zip(charts, slides):
+                        self.assert_formats(chart, "0")
+                        self.assert_workbook(chart, "0",
+                                             {"B": slide["chart"]["series"][0]["values"],
+                                              "C": slide["chart"]["series"][1]["values"]})
+                    BUILDER.update_chart(chart_shape(presentation),
+                                         payload("0%", (0.1, 0.2, 0.3), multiple=True))
+                    self.assertEqual(charts[1].part.chart_workbook.xlsx_part.blob, second_workbook)
+                    self.assertEqual((SKILL / profile["asset"]).read_bytes(), source)
+                    result = BUILDER.read_package(output.read_bytes())
+                    for name, data in BUILDER.read_package(source).items():
+                        if name.startswith(BUILDER.DESIGN) or name.startswith("ppt/media/"):
+                            self.assertEqual(result[name], data)
+
+    def test_original_high_value_multiseries_reserves_native_legend_space_and_axis_font(self):
+        config = BUILDER.load_config(SKILL)
+        for key, profile in config["templates"].items():
+            for count in (2, 6):
+                with self.subTest(template=key, series=count):
+                    presentation = Presentation(SKILL / profile["asset"])
+                    slide = presentation.slides[profile["layouts"]["chart"]["reference_slide"] - 1]
+                    shape = next(shape for shape in slide.shapes if shape.has_chart)
+                    geometry = (shape.left, shape.top, shape.width, shape.height)
+                    style = etree.tostring(shape.chart.series[0]._element.spPr)
+                    axis_style = etree.tostring(shape.chart._chartSpace.plotArea.valAx_lst[0].find(
+                        f"{{{CHART_NS}}}txPr"))
+                    value = {
+                        "categories": ["A", "B", "C"],
+                        "series": [{"name": f"Series {index + 1}",
+                                    "values": [15 + index * 5, 35 + index * 3, 60 - index * 3]}
+                                   for index in range(count)],
+                        "number_format": '0"%"',
+                    }
+                    BUILDER.update_chart(shape, value)
+                    self.assertEqual(shape.chart.legend.position, XL_LEGEND_POSITION.BOTTOM)
+                    self.assertFalse(shape.chart.legend.include_in_layout)
+                    self.assertEqual(shape.chart.legend._element.overlay.get("val"), "0")
+                    self.assertEqual(etree.tostring(shape.chart.legend._element.find(
+                        f"{{{CHART_NS}}}txPr")), axis_style)
+                    self.assertEqual(etree.tostring(shape.chart.series[0]._element.spPr), style)
+                    self.assertEqual((shape.left, shape.top, shape.width, shape.height), geometry)
+                    self.assertEqual(list(shape.chart.series[-1].values),
+                                     value["series"][-1]["values"])
+                    self.assert_formats(shape.chart, '0"%"')
+
+    def test_single_series_does_not_add_legend_or_change_authored_plot_layout_and_font(self):
+        chart = self.shape.chart
+        before_layout = etree.tostring(chart._chartSpace.plotArea.find(f"{{{CHART_NS}}}layout"))
+        before_font = etree.tostring(chart._chartSpace.plotArea.valAx_lst[0].find(
+            f"{{{CHART_NS}}}txPr"))
+        self.assertFalse(chart.has_legend)
+        BUILDER.update_chart(self.shape, payload())
+        self.assertFalse(chart.has_legend)
+        self.assertEqual(etree.tostring(chart._chartSpace.plotArea.find(
+            f"{{{CHART_NS}}}layout")), before_layout)
+        self.assertEqual(etree.tostring(chart._chartSpace.plotArea.valAx_lst[0].find(
+            f"{{{CHART_NS}}}txPr")), before_font)
 
 
 if __name__ == "__main__":

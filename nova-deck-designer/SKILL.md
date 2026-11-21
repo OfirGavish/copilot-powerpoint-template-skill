@@ -4,7 +4,7 @@ description: "Create an editable presentation from one of four bundled NOVA WORK
 license: LicenseRef-NOVA-Skill-Attribution-1.0
 metadata:
   author: "Ofir Gavish"
-  version: "1.0.1"
+  version: "1.0.2"
   generation-mode: "direct-pptx"
 ---
 # NOVA deck designer
@@ -87,6 +87,9 @@ process steps from right to left. Keep Latin product names, URLs, emails,
 numbers and signs internally LTR using native run direction. Never reverse
 characters or mirror the logo. The helper handles generated text direction;
 do not run a separate XML rewrite that could damage namespaces or branding.
+Preserve supplied characters exactly, including adjacent Hebrew/Latin text,
+hashtags and product prefixes. Desired spaces must come from the input, not
+automatic insertion. Keep Hebrew prefixes outside an email's LTR token.
 
 ## Check and hand off
 

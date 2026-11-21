@@ -38,10 +38,16 @@ class RtlSpacingTests(unittest.TestCase):
                 self.assertEqual(actual, expected)
                 self.assertEqual("".join(part for part, _ in actual), text)
 
-    def test_existing_unspaced_script_boundaries_still_get_one_space(self):
-        self.assertEqual(
-            BUILDER.display_runs("בוחניםMicrosoft 365 Copilotבתרחיש", True),
-            [("בוחנים ", False), ("Microsoft 365 Copilot", True), (" בתרחיש", False)])
+    def test_unspaced_script_boundaries_preserve_every_supplied_character(self):
+        for text, expected in (
+                ("בוחניםMicrosoft 365 Copilotבתרחיש",
+                 [("בוחנים", False), ("Microsoft 365 Copilot", True), ("בתרחיש", False)]),
+                ("#חדשAI", [("#חדש", False), ("AI", True)]),
+                ("לCopilot", [("ל", False), ("Copilot", True)]),
+                ("AIחדש", [("AI", True), ("חדש", False)])):
+            with self.subTest(text=text):
+                self.assertEqual(BUILDER.display_runs(text, True), expected)
+                self.assertEqual("".join(part for part, _ in expected), text)
 
     def test_signs_and_numeric_phrases_remain_ltr(self):
         self.assertEqual(
@@ -55,13 +61,33 @@ class RtlSpacingTests(unittest.TestCase):
     def test_urls_and_email_are_not_split_or_normalized(self):
         for token in ("https://example.test/מסלול?name=Microsoft&n=365",
                       "www.example.test/AI-365?x=1",
-                      "user.name+tag@example.test",
-                      "שםEnglish@example.test"):
+                      "user.name+tag@example.test"):
             text = f"לפני {token} אחרי"
             with self.subTest(token=token):
                 self.assertEqual(
                     BUILDER.display_runs(text, True),
                     [("לפני ", False), (token, True), (" אחרי", False)])
+
+    def test_ascii_email_does_not_absorb_hebrew_prefix_or_suffix(self):
+        for text, expected in (
+                ("כתבו ב־test@example.com",
+                 [("כתבו ב־", False), ("test@example.com", True)]),
+                ("כתבו לtest@example.comעכשיו",
+                 [("כתבו ל", False), ("test@example.com", True), ("עכשיו", False)]),
+                ("כתבו (user.name+tag-1@xn--example-9d0b.test), אחרי",
+                 [("כתבו (", False), ("user.name+tag-1@xn--example-9d0b.test", True),
+                  ("), אחרי", False)]),
+                ("כתבו ב־test@example.com. אחרי",
+                 [("כתבו ב־", False), ("test@example.com", True), (". אחרי", False)]),
+                ("  כתבו ב־first.last+tag-name@sub-domain.example.com \t",
+                 [("  כתבו ב־", False), ("first.last+tag-name@sub-domain.example.com", True),
+                  (" \t", False)]),
+                ("שםEnglish@example.test",
+                 [("שם", False), ("English@example.test", True)])):
+            with self.subTest(text=text):
+                actual = BUILDER.display_runs(text, True)
+                self.assertEqual(actual, expected)
+                self.assertEqual("".join(part for part, _ in actual), text)
 
     def test_plain_text_and_ltr_mode_keep_existing_behavior(self):
         for text in ("  שלום עולם.  ", "", " \t "):
@@ -81,6 +107,10 @@ class RtlSpacingTests(unittest.TestCase):
             ("שלום עולם", True, "1"),
             ("+50", True, "0"),
             ("-12.5%", True, "0"),
+            ("#חדשAI", True, "1"),
+            ("לCopilot", True, "1"),
+            ("כתבו ב־test@example.com.", True, "1"),
+            ("לפני  #חדשAI\nלCopilot אחרי", True, "1"),
         ]
         for text, rtl, _ in samples:
             frame = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(1)).text_frame
@@ -96,11 +126,13 @@ class RtlSpacingTests(unittest.TestCase):
         restored = Presentation(output)
         for shape, (text, rtl, paragraph_direction) in zip(restored.slides[0].shapes, samples):
             with self.subTest(text=text, rtl=rtl):
+                self.assertEqual(shape.text, text)
                 paragraph = shape.text_frame.paragraphs[0]
-                self.assertEqual(paragraph.text, text)
+                line = text.split("\n")[0]
+                self.assertEqual(paragraph.text, line)
                 self.assertEqual(paragraph._p.pPr.get("rtl"), paragraph_direction)
                 self.assertFalse(any(unicodedata.category(char) == "Cf" for char in paragraph.text))
-                expected = BUILDER.display_runs(text, rtl)
+                expected = BUILDER.display_runs(line, rtl)
                 self.assertEqual([run.text for run in paragraph.runs], [part for part, _ in expected])
                 for run, (_, ltr) in zip(paragraph.runs, expected):
                     self.assertEqual(run._r.rPr.find(f"{{{BUILDER.A}}}rtl").get("val"),
