@@ -128,6 +128,9 @@ publish artifacts. Output must be a new `.pptx` in an existing, host-approved
 directory outside the skill folder. Existing output files are refused: choose
 a new output name when rerunning. Runtime dependencies are `python-pptx>=1.0.2,<2`,
 `defusedxml>=0.7.1,<1`, and `lxml>=4.9,<7` (see `requirements.txt`).
+Local packaging additionally uses PyYAML from `requirements-dev.txt` to reject
+invalid skill frontmatter before distributing a package. PyYAML is not a
+requirement of the hosted presentation-generation script.
 
 Template keys are `en-dark`, `en-light`, `he-dark`, and `he-light`.
 `examples\pilot-en.json` and `examples\pilot-he.json` contain six-slide plans;

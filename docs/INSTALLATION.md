@@ -55,6 +55,10 @@ Use the resulting **`dist\nova-deck-designer.zip`**. Never upload GitHub's
 **Code → Download ZIP** archive or a ZIP of the complete repository as a skill.
 Downloading a repository archive for local extraction is not skill installation.
 The packager runs the read-only probe, checking dependencies and asset hashes.
+It also strictly parses SKILL.md frontmatter, checks the matching folder name
+and required description, and rejects invalid UTF-8/frontmatter delimiters or
+empty instructions. Packaging uses PyYAML from `requirements-dev.txt` in the
+local development environment; the presentation builder does not require it.
 Its local guards reject ZIPs over 2 MiB or aggregate extracted content over
 5 MiB; these guards are not universal client guarantees.
 
@@ -102,6 +106,32 @@ credit. See [ATTRIBUTION.md](../ATTRIBUTION.md) for a summary; the full license
 controls. This is not standard MIT or an OSI-approved license.
 
 ## Troubleshooting
+
+### Loading failure versus generation failure
+
+If PowerPoint reports that it cannot **load the skill**, first check the exact
+SKILL.md, matching directory name, OneDrive sync, encoding and installed package.
+Do not immediately attribute that error to Python or a missing font: those
+generation capabilities are checked only after skill instructions have loaded.
+
+The original public `nova-deck-designer` 1.0.0 frontmatter contained an unquoted
+colon in its description (`templates: English ...`), which fails strict YAML
+parsing. The 1.0.1 metadata fix quotes the same description without changing its
+meaning, templates or generation instructions. Replace the complete package
+in the failing environment, wait for sync, Refresh, and start a new chat.
+This corrects a confirmed format defect; an exact client error is still needed
+before declaring it the cause of any particular tenant's failure.
+
+Compare the installed SKILL.md with the distributed package. Two installations
+with the same skill name can contain different instructions or versions;
+successful loading of one does not establish that the other file is valid.
+Use PowerPoint's **Open skills folder**, not a guessed account-specific path.
+
+For isolation, a tiny instruction-only loading canary can test skill discovery
+and invocation without PPTX assets, scripts or generation. If that loads but the
+full package does not, inspect the actual resource/installation error. If neither
+loads, check the base custom-skill installation/client/tenant configuration.
+Only investigate code execution and file delivery once instruction loading works.
 
 | Symptom | Action |
 |---|---|

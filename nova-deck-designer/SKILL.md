@@ -1,10 +1,10 @@
 ---
 name: nova-deck-designer
-description: Create an editable presentation from one of four bundled NOVA WORKS PowerPoint templates: English or Hebrew, dark or light. Use direct PPTX generation in a code-capable runtime instead of passing local asset paths to attachment-only template tools. Preserve the actual template design and use real Hebrew RTL.
+description: "Create an editable presentation from one of four bundled NOVA WORKS PowerPoint templates: English or Hebrew, dark or light. Use direct PPTX generation in a code-capable runtime instead of passing local asset paths to attachment-only template tools. Preserve the actual template design and use real Hebrew RTL."
 license: LicenseRef-NOVA-Skill-Attribution-1.0
 metadata:
   author: "Ofir Gavish"
-  version: "1.0.0"
+  version: "1.0.1"
   generation-mode: "direct-pptx"
 ---
 # NOVA deck designer

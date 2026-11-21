@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import stat
 import tempfile
@@ -45,6 +46,36 @@ def assemble_portable(destination):
     shutil.copyfile(ROOT / "LICENSE", destination / "LICENSE.txt")
     shutil.copyfile(ROOT / "requirements.txt", destination / "requirements.txt")
     shutil.copytree(ROOT / "examples", destination / "examples")
+
+
+def validate_skill_frontmatter(root):
+    import yaml
+
+    text = (root / "SKILL.md").read_text(encoding="utf-8")
+    lines = text.splitlines()
+    if not lines or lines[0] != "---":
+        raise ValueError(f"{root.name}: SKILL.md must begin with UTF-8 YAML frontmatter")
+    closing = next((index for index, line in enumerate(lines[1:], 1) if line == "---"), None)
+    if closing is None:
+        raise ValueError(f"{root.name}: SKILL.md frontmatter is not closed")
+    try:
+        data = yaml.safe_load("\n".join(lines[1:closing]))
+    except yaml.YAMLError as error:
+        raise ValueError(f"{root.name}: invalid SKILL.md YAML: {error}") from error
+    if not isinstance(data, dict):
+        raise ValueError(f"{root.name}: SKILL.md frontmatter must be a mapping")
+    if "metadata" in data and not isinstance(data["metadata"], dict):
+        raise ValueError(f"{root.name}: optional metadata must be a mapping")
+    name = data.get("name")
+    if not isinstance(name, str) or name != root.name or not re.fullmatch(
+            r"[a-z0-9]+(?:-[a-z0-9]+)*", name) or len(name) > 64:
+        raise ValueError(f"{root.name}: skill name must be a valid slug matching its folder")
+    description = data.get("description")
+    if not isinstance(description, str) or not description.strip() or len(description) > 1024:
+        raise ValueError(f"{root.name}: description must be non-empty text within 1024 characters")
+    if not "\n".join(lines[closing + 1:]).strip():
+        raise ValueError(f"{root.name}: SKILL.md instructions are empty")
+    return data
 
 
 def probe_skill(root):
@@ -120,6 +151,7 @@ def package_skill(variant="powerpoint", output_directory=None):
         if variant == "portable":
             root = temporary / name
             assemble_portable(root)
+        skill_data = validate_skill_frontmatter(root)
         probe = probe_skill(root)
         renderer_sha256 = hashlib.sha256(
             (root / "scripts" / "build_presentation.py").read_bytes()).hexdigest()
@@ -150,6 +182,7 @@ def package_skill(variant="powerpoint", output_directory=None):
             readme = submission / "README.md"
             readme.write_bytes(render_catalog_readme(
                 readme.read_bytes().decode("utf-8")).encode("utf-8"))
+            validate_skill_frontmatter(submission)
             replace_generated_directory(
                 submission, output_directory / "cat" / "submissions" / name)
         shutil.copyfile(candidate, output)
@@ -161,6 +194,7 @@ def package_skill(variant="powerpoint", output_directory=None):
         "expanded_bytes": expanded,
         "files": file_count,
         "template_keys": probe["template_keys"],
+        "skill_version": skill_data.get("metadata", {}).get("version"),
         "renderer_version": probe["version"],
         "renderer_sha256": renderer_sha256,
         "host_installation_verified": False,

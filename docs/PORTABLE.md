@@ -9,8 +9,9 @@ instructions for users to find their own templates.
 
 ## Build
 
-From the repository root in an approved local developer environment with the
-repository's runtime dependencies already installed:
+From the repository root in an approved local developer environment with
+`requirements-dev.txt` installed (including the runtime and frontmatter-validation
+dependencies):
 
 ```powershell
 python tools\package_skill.py --variant portable
