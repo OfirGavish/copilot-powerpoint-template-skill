@@ -89,6 +89,66 @@ class RtlSpacingTests(unittest.TestCase):
                 self.assertEqual(actual, expected)
                 self.assertEqual("".join(part for part, _ in actual), text)
 
+    def test_urls_exclude_adjacent_punctuation_and_hebrew_prose(self):
+        cases = [
+            ("ראו https://example.com,פרטים נוספים",
+             [("ראו ", False), ("https://example.com", True), (",פרטים נוספים", False)]),
+            ("ראו www.example.com;פרטים נוספים",
+             [("ראו ", False), ("www.example.com", True), (";פרטים נוספים", False)]),
+            ("ראו https://example.com/path,פרטיםAI",
+             [("ראו ", False), ("https://example.com/path", True), (",פרטים", False),
+              ("AI", True)]),
+            ("ראו (https://example.com/מסלול),פרטים",
+             [("ראו (", False), ("https://example.com/מסלול", True), ("),פרטים", False)]),
+            ("ראו https://example.com)פרטים",
+             [("ראו ", False), ("https://example.com", True), (")פרטים", False)]),
+            ("ראו https://example.com/מסלול. אחרי",
+             [("ראו ", False), ("https://example.com/מסלול", True), (". אחרי", False)]),
+            ("ראו “https://example.com/מסלול” אחרי",
+             [("ראו “", False), ("https://example.com/מסלול", True), ("” אחרי", False)]),
+            ("ראו https://example.com/path?x=1,פרטים",
+             [("ראו ", False), ("https://example.com/path?x=1", True), (",פרטים", False)]),
+            ("ראו https://example.com/path#section;פרטים",
+             [("ראו ", False), ("https://example.com/path#section", True), (";פרטים", False)]),
+        ]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                actual = BUILDER.display_runs(text, True)
+                self.assertEqual(actual, expected)
+                self.assertEqual("".join(part for part, _ in actual), text)
+
+    def test_internationalized_url_components_and_balanced_punctuation_stay_ltr(self):
+        tokens = [
+            "https://דוגמה.ישראל/מסלול",
+            "https://example.com/מסלול?שם=שלום&n=365",
+            "https://example.com/מסלול#פרטים",
+            "https://example.com/wiki/Name_(מסלול)",
+            "http://[2001:db8::1]:8080/מסלול",
+            "https://example.com/מסלול%2Cפרטים?שם=שלום%3Bעולם",
+            "https://example.com/מסלול;lang=he",
+            "https://example.com/path/a,b",
+            "https://example.com/wiki/Name_(פרט,מידע)",
+            "www.דוגמה.ישראל/מסלול?שם=שלום#פרטים",
+            "HTTPS://example.com/מסלול",
+            "https://name;tag@example.com/מסלול",
+            "https://name,tag@example.com/מסלול",
+        ]
+        for token in tokens:
+            text = f"לפני {token} אחרי"
+            with self.subTest(token=token):
+                self.assertEqual(BUILDER.display_runs(text, True),
+                                 [("לפני ", False), (token, True), (" אחרי", False)])
+
+    def test_url_after_an_ascii_phrase_is_not_consumed_by_the_phrase(self):
+        for token in ("https://example.com/מסלול?שם=שלום&n=365",
+                      "www.example.com/מסלול#פרטים"):
+            text = f"ראו Microsoft 365 {token},פרטיםAI"
+            with self.subTest(token=token):
+                expected = [("ראו ", False), ("Microsoft 365", True), (" ", False),
+                            (token, True), (",פרטים", False), ("AI", True)]
+                self.assertEqual(BUILDER.display_runs(text, True), expected)
+                self.assertEqual("".join(part for part, _ in expected), text)
+
     def test_plain_text_and_ltr_mode_keep_existing_behavior(self):
         for text in ("  שלום עולם.  ", "", " \t "):
             with self.subTest(text=text):
@@ -110,6 +170,8 @@ class RtlSpacingTests(unittest.TestCase):
             ("#חדשAI", True, "1"),
             ("לCopilot", True, "1"),
             ("כתבו ב־test@example.com.", True, "1"),
+            ("ראו https://example.com,פרטים נוספים", True, "1"),
+            ("ראו https://example.com/מסלול?שם=שלום&n=365 אחרי", True, "1"),
             ("לפני  #חדשAI\nלCopilot אחרי", True, "1"),
         ]
         for text, rtl, _ in samples:

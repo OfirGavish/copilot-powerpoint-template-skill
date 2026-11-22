@@ -317,3 +317,23 @@ to load by the user. PowerPoint skill 1.0.2 retains that correction while sharin
 the reviewed renderer; this does not diagnose an unrelated package's failure.
 The 1.1.1 live-host evidence above is historical, not a claim that every newer
 build has been re-tested in every host or tenant.
+
+## Additional review follow-up in 1.1.3
+
+The shared renderer rejects empty object keys recursively before flattening,
+reports their exact JSON path, and creates no output for rejected input.
+Optional blank text and blank table cells remain supported.
+
+URL display boundaries no longer classify punctuation-attached Hebrew prose as
+part of an English run. Internationalized hosts, paths, query values and
+fragments remain supported, along with percent encoding and balanced brackets.
+The scanner resumes at the actual URL boundary so later Latin text is not lost
+inside an RTL remainder, and ASCII phrases cannot swallow a following URL.
+See [content-format.md](../nova-deck-designer/references/content-format.md) for
+the explicit punctuation convention and how to disambiguate literal commas.
+No supplied text is rewritten.
+
+The 80-test source suite covers both findings, complete package/license
+separation, saved native run direction, and titles, cards, tables and notes in
+both Hebrew themes. PowerPoint skill 1.0.3 uses this same renderer. These are
+local regressions, not a fresh three-platform installation certification.

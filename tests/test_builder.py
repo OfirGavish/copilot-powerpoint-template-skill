@@ -248,6 +248,80 @@ class BuilderTests(unittest.TestCase):
                 self.assertFalse((self.directory / "output.pptx").exists())
         BUILDER.validate_plan(plan("all-layouts-en.json"), profile)
 
+    def test_empty_object_keys_are_rejected_before_flattening_with_context(self):
+        profile = BUILDER.load_config(SKILL)["templates"]["en-light"]
+        cases = [
+            ({"language": "en", "slides": [], "": {"slides": []}}, "$['']"),
+            ({"language": "en", "slides": [
+                {"layout": "cover", "title": "Q", "": {"subtitle": "important content"}}]},
+             "$['slides'][0]['']"),
+        ]
+        for layout in ("three-cards", "chart", "table"):
+            slide = copy.deepcopy(next(s for s in plan("all-layouts-en.json")["slides"]
+                                       if s["layout"] == layout))
+            if layout == "three-cards":
+                slide["cards"][0][""] = {"body": "important content"}
+                context = "$['slides'][0]['cards'][0]['']"
+            elif layout == "chart":
+                slide["chart"]["series"][0][""] = {"values": [1, 2]}
+                context = "$['slides'][0]['chart']['series'][0]['']"
+            else:
+                slide["rows"][1][0] = {"": "important content"}
+                context = "$['slides'][0]['rows'][1][0]['']"
+            cases.append(({"language": "en", "slides": [slide]}, context))
+        for content, context in cases:
+            with self.subTest(context=context):
+                with self.assertRaisesRegex(ValueError, "Empty input object keys") as error:
+                    BUILDER.build(SKILL, "en-light", content, self.directory / "output.pptx")
+                self.assertIn(context, str(error.exception))
+                self.assertFalse((self.directory / "output.pptx").exists())
+        BUILDER.validate_plan(plan("all-layouts-en.json"), profile)
+
+    def test_empty_text_values_remain_valid_for_optional_fields_and_table_cells(self):
+        content = plan("all-layouts-en.json")
+        cover = content["slides"][0]
+        cover.update(subtitle="", eyebrow="", meta="", notes="")
+        table = next(s for s in content["slides"] if s["layout"] == "table")
+        table["rows"][1][0] = ""
+        presentation = Presentation(self.generate("en-light", content))
+        self.assertEqual(presentation.slides[0].notes_slide.notes_text_frame.text, "")
+        actual_table = next(shape.table for slide in presentation.slides
+                            for shape in slide.shapes if shape.has_table)
+        self.assertEqual(actual_table.cell(1, 0).text, "")
+
+    def test_url_boundaries_and_directions_survive_all_bound_text_surfaces(self):
+        for theme in ("light", "dark"):
+            content = plan("all-layouts-he.json")
+            prose = "ראו https://example.com,פרטים AI"
+            iri = "ראו https://example.com/מסלול?שם=שלום&n=365 אחרי"
+            cover, cards, table = (next(s for s in content["slides"] if s["layout"] == layout)
+                                   for layout in ("cover", "three-cards", "table"))
+            cover.update(title=prose, subtitle=iri, notes=prose + "\n" + iri)
+            cards["cards"][0]["body"] = prose
+            cards["cards"][1]["body"] = iri
+            table["rows"][1] = [prose, iri, ""]
+            presentation = Presentation(self.generate(f"he-{theme}", content, f"{theme}.pptx"))
+            checked = {"title": 0, "subtitle": 0, "card": 0, "table": 0, "notes": 0}
+            for slide in presentation.slides:
+                frames = [(shape.name.split(".")[-1], shape.text_frame)
+                          for shape in slide.shapes if shape.has_text_frame]
+                for shape in slide.shapes:
+                    if shape.has_table:
+                        frames.extend(("table", cell.text_frame)
+                                      for row in shape.table.rows for cell in row.cells)
+                frames.append(("notes", slide.notes_slide.notes_text_frame))
+                for surface, frame in frames:
+                    for paragraph in frame.paragraphs:
+                        if paragraph.text not in (prose, iri):
+                            continue
+                        expected = BUILDER.display_runs(paragraph.text, True)
+                        self.assertEqual([(r.text, r._r.rPr.find(f"{{{BUILDER.A}}}rtl").get("val"))
+                                          for r in paragraph.runs],
+                                         [(part, "0" if ltr else "1") for part, ltr in expected])
+                        self.assertEqual(paragraph._p.pPr.get("rtl"), "1")
+                        checked["card" if surface == "body" else surface] += 1
+            self.assertEqual(checked, {"title": 1, "subtitle": 1, "card": 2, "table": 2, "notes": 2})
+
     def test_mixed_script_text_is_preserved_in_titles_cards_tables_and_notes(self):
         content = plan("all-layouts-he.json")
         samples = ["#חדשAI", "לCopilot", "כתבו ב־test@example.com", "לפני  AI\t אחרי"]
