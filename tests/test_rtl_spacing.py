@@ -58,6 +58,32 @@ class RtlSpacingTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(BUILDER.display_runs(text, True), [(text, True)])
 
+    def test_unicode_latin_letters_and_attached_combining_marks_stay_ltr(self):
+        for token in ("Café", "Cafe\u0301", "Cafe\u0301\u0323", "Łódź", "İstanbul",
+                      "Ångström", "Dvořák", "Việt Nam", "Æsir", "Straße",
+                      "ǅuro", "ＡＩ", "ꞵeta", "Kelvin", "Ångström", "ᵃbc",
+                      "Café −12.5%"):
+            text = f"לפני {token}שָׁלוֹם"
+            with self.subTest(token=token):
+                expected = [("לפני ", False), (token, True), ("שָׁלוֹם", False)]
+                self.assertEqual(BUILDER.display_runs(text, True), expected)
+                self.assertEqual("".join(part for part, _ in expected), text)
+        for text, expected in (
+                ("\u0301Café", [("\u0301", False), ("Café", True)]),
+                ("Café \u0301שלום", [("Café", True), (" \u0301שלום", False)]),
+                ("שָׁלוֹם", [("שָׁלוֹם", False)]),
+                ("Αθήνα Москва", [("Αθήνα Москва", False)])):
+            with self.subTest(text=text):
+                self.assertEqual(BUILDER.display_runs(text, True), expected)
+
+    def test_unicode_minus_stays_with_signed_values_without_rewriting(self):
+        for token in ("−12%", "−12.5%", "−0.25", "+12%", "-12%", "2026−2027"):
+            text = f"ערך {token} ביעד"
+            with self.subTest(token=token):
+                self.assertEqual(BUILDER.display_runs(text, True),
+                                 [("ערך ", False), (token, True), (" ביעד", False)])
+        self.assertEqual(BUILDER.display_runs("−שלום", True), [("−שלום", False)])
+
     def test_urls_and_email_are_not_split_or_normalized(self):
         for token in ("https://example.test/מסלול?name=Microsoft&n=365",
                       "www.example.test/AI-365?x=1",
@@ -139,6 +165,31 @@ class RtlSpacingTests(unittest.TestCase):
                 self.assertEqual(BUILDER.display_runs(text, True),
                                  [("לפני ", False), (token, True), (" אחרי", False)])
 
+    def test_matching_url_quotes_end_before_adjacent_prose(self):
+        for opening, closing in (('"', '"'), ("'", "'"), ("“", "”"), ("‘", "’"),
+                                 ("«", "»"), ("‹", "›"), ("„", "“"), ("‚", "‘")):
+            for token in ("https://example.com", "www.example.com",
+                          "https://דוגמה.ישראל/מסלול?שם=שלום#פרטים",
+                          "https://example.com/wiki/(מסלול)"):
+                text = f"ראו {opening}{token}{closing}שלוםAI"
+                with self.subTest(opening=opening, token=token):
+                    expected = [(f"ראו {opening}", False), (token, True),
+                                (closing + "שלום", False), ("AI", True)]
+                    self.assertEqual(BUILDER.display_runs(text, True), expected)
+                    self.assertEqual("".join(part for part, _ in expected), text)
+
+    def test_unmatched_and_internal_url_quotes_are_not_stripped(self):
+        for token in ("https://example.com/O'Connor", "https://example.com/מסלול%27שם",
+                      "https://example.com/מסלול”פנימי"):
+            text = f"לפני {token} אחרי"
+            with self.subTest(token=token):
+                self.assertEqual(BUILDER.display_runs(text, True),
+                                 [("לפני ", False), (token, True), (" אחרי", False)])
+        text = "ראו “https://example.com/O'Connor”שלום"
+        self.assertEqual(BUILDER.display_runs(text, True),
+                         [("ראו “", False), ("https://example.com/O'Connor", True),
+                          ("”שלום", False)])
+
     def test_url_after_an_ascii_phrase_is_not_consumed_by_the_phrase(self):
         for token in ("https://example.com/מסלול?שם=שלום&n=365",
                       "www.example.com/מסלול#פרטים"):
@@ -148,6 +199,12 @@ class RtlSpacingTests(unittest.TestCase):
                             (token, True), (",פרטים", False), ("AI", True)]
                 self.assertEqual(BUILDER.display_runs(text, True), expected)
                 self.assertEqual("".join(part for part, _ in expected), text)
+
+    def test_url_after_a_unicode_phrase_has_its_own_boundary(self):
+        text = "ראו Café −12% “https://example.com”שלום"
+        self.assertEqual(BUILDER.display_runs(text, True),
+                         [("ראו ", False), ("Café −12%", True), (" “", False),
+                          ("https://example.com", True), ("”שלום", False)])
 
     def test_plain_text_and_ltr_mode_keep_existing_behavior(self):
         for text in ("  שלום עולם.  ", "", " \t "):
@@ -172,6 +229,10 @@ class RtlSpacingTests(unittest.TestCase):
             ("כתבו ב־test@example.com.", True, "1"),
             ("ראו https://example.com,פרטים נוספים", True, "1"),
             ("ראו https://example.com/מסלול?שם=שלום&n=365 אחרי", True, "1"),
+            ("“https://example.com”שלום", True, "1"),
+            ("בדיקת Café −12%", True, "1"),
+            ("בדיקת Cafe\u0301 −12.5%", True, "1"),
+            ("Café −12%", True, "0"),
             ("לפני  #חדשAI\nלCopilot אחרי", True, "1"),
         ]
         for text, rtl, _ in samples:

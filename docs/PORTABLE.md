@@ -337,3 +337,24 @@ The 80-test source suite covers both findings, complete package/license
 separation, saved native run direction, and titles, cards, tables and notes in
 both Hebrew themes. PowerPoint skill 1.0.3 uses this same renderer. These are
 local regressions, not a fresh three-platform installation certification.
+
+## Unicode and quoted-URL follow-up in 1.1.4
+
+The URL scanner now recognizes the matching closing quote while scanning, not
+only at the end of its candidate. Quotes and following Hebrew prose remain
+outside the LTR run even without separating whitespace. Supported delimiters
+include straight quotes, curly quotes, guillemets and low-opening quotes.
+Internationalized paths/queries/fragments and internal URL apostrophes remain
+supported; ambiguous literal delimiters can be percent-encoded.
+
+Latin phrases use Unicode-aware letter classification, keep attached combining
+marks, and include U+2212 MINUS SIGN with signed values. The renderer never
+normalizes, substitutes, reorders or inserts characters: decomposition is used
+only to recognize Latin letter forms. Boundary whitespace still belongs to
+surrounding RTL text, and Hebrew letters and their marks retain RTL direction.
+
+Regression coverage includes explicit expected runs and saved native direction
+and proofing language in titles, subtitles, cards, table cells and notes in both
+Hebrew themes. PowerPoint skill 1.0.4 shares the portable 1.1.4 renderer. Earlier
+cross-host acceptance and the dense cover-title fit limitation remain historical
+evidence; this patch is not a new host/tenant certification or an auto-fit change.

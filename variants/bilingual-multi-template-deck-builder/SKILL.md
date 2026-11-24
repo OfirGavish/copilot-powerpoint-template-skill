@@ -4,7 +4,7 @@ description: "Use when asked to create a new editable English or Hebrew PowerPoi
 license: LicenseRef-NOVA-Skill-Attribution-1.0
 metadata:
   author: "Ofir Gavish"
-  version: "1.1.3"
+  version: "1.1.4"
 ---
 # Bilingual Multi-Template Deck Builder
 

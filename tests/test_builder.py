@@ -340,6 +340,48 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual([cell.text for cell in actual_table.rows[1].cells],
                          list(reversed(samples[:3])))
 
+    def test_unicode_and_quoted_urls_keep_explicit_directions_on_all_text_surfaces(self):
+        samples = {
+            "בדיקת Café −12%": [("בדיקת ", False), ("Café −12%", True)],
+            "בדיקת Cafe\u0301 −12.5%": [("בדיקת ", False), ("Cafe\u0301 −12.5%", True)],
+            "“https://example.com”שלום": [("“", False), ("https://example.com", True),
+                                         ("”שלום", False)],
+        }
+        for theme in ("light", "dark"):
+            content = plan("all-layouts-he.json")
+            content["slides"] = [s for s in content["slides"]
+                                 if s["layout"] in ("cover", "three-cards", "table")]
+            cover, cards, table = content["slides"]
+            values = list(samples)
+            cover.update(title=values[0], subtitle=values[2], notes="\n".join(values))
+            for card, text in zip(cards["cards"], values):
+                card["body"] = text
+            table["rows"][1] = values
+            presentation = Presentation(self.generate(f"he-{theme}", content, f"{theme}.pptx"))
+            checked = {"title": 0, "subtitle": 0, "body": 0, "table": 0, "notes": 0}
+            for slide in presentation.slides:
+                frames = [(shape.name.split(".")[-1], shape.text_frame)
+                          for shape in slide.shapes if shape.has_text_frame]
+                for shape in slide.shapes:
+                    if shape.has_table:
+                        frames.extend(("table", cell.text_frame)
+                                      for row in shape.table.rows for cell in row.cells)
+                frames.append(("notes", slide.notes_slide.notes_text_frame))
+                for surface, frame in frames:
+                    for paragraph in frame.paragraphs:
+                        expected = samples.get(paragraph.text)
+                        if expected is None:
+                            continue
+                        actual = [(run.text, run._r.rPr.find(f"{{{BUILDER.A}}}rtl").get("val"),
+                                   run._r.rPr.get("lang")) for run in paragraph.runs]
+                        self.assertEqual(actual, [(text, "0" if ltr else "1",
+                                                   "en-US" if ltr else "he-IL")
+                                                  for text, ltr in expected])
+                        self.assertEqual(paragraph._p.pPr.get("rtl"), "1")
+                        checked[surface] += 1
+            self.assertEqual(checked, {"title": 1, "subtitle": 1, "body": 3,
+                                      "table": 3, "notes": 3})
+
     def test_language_mismatch_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "language"):
             self.generate("en-dark", plan("pilot-he.json"))

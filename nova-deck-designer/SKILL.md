@@ -4,7 +4,7 @@ description: "Create an editable presentation from one of four bundled NOVA WORK
 license: LicenseRef-NOVA-Skill-Attribution-1.0
 metadata:
   author: "Ofir Gavish"
-  version: "1.0.3"
+  version: "1.0.4"
   generation-mode: "direct-pptx"
 ---
 # NOVA deck designer
